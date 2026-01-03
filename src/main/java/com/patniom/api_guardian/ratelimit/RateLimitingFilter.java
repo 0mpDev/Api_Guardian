@@ -62,6 +62,7 @@ public class RateLimitingFilter extends OncePerRequestFilter {
 
     private String resolveIdentifier(HttpServletRequest request) {
 
+        //jwt
         if (request.getAttribute("USER_ID") != null) {
             return "USER:" + request.getAttribute("USER_ID");
         }

@@ -24,11 +24,17 @@ public class SecurityConfig {
                         .requestMatchers("/error").permitAll()
                         .anyRequest().authenticated()
                 )
-                // 👇 THIS IS CRITICAL
+
                 .addFilterBefore(rateLimitingFilter,
-                        UsernamePasswordAuthenticationFilter.class);
+UsernamePasswordAuthenticationFilter.class); //Inserts RateLimitingFilter into Spring Security’s filter chain before UsernamePasswordAuthenticationFilter
+//Rate limit even unauthenticated requests
+//Block abusive traffic early
+//Avoid unnecessary DB / JWT processing
+//Save CPU & memory
 
         return http.build();
+        //Freezes the configuration
+        //Spring uses this exact chain for all requests
     }
 }
 

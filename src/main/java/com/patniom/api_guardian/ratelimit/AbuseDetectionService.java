@@ -12,7 +12,7 @@ public class AbuseDetectionService {
     private RedisTemplate<String, Object> redisTemplate;
 
     public boolean isBanned(String identifier) {
-        return Boolean.TRUE.equals(redisTemplate.hasKey("ban:" + identifier));
+        return redisTemplate.hasKey("ban:" + identifier);
     }
 
     public void recordViolation(String identifier) {
