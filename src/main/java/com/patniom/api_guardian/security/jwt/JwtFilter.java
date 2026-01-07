@@ -7,13 +7,13 @@ import jakarta.servlet.http.HttpServletResponse;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
-import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.security.web.authentication.WebAuthenticationDetailsSource;
 import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
 
 import java.io.IOException;
-import java.util.List;
+import java.util.Collections;
 
 @Slf4j
 @Component
@@ -33,25 +33,34 @@ public class JwtFilter extends OncePerRequestFilter {
         if (authHeader != null && authHeader.startsWith("Bearer ")) {
             String token = authHeader.substring(7);
 
+            // Validate token
             if (jwtUtil.validateToken(token)) {
                 String userId = jwtUtil.extractUserId(token);
 
-                if (userId != null) {
-                    // 🔒 Register authentication with Spring Security
+                if (userId != null &&
+                        SecurityContextHolder.getContext().getAuthentication() == null) {
+
+                    // ✅ CRITICAL: Only set authentication if NOT already authenticated
+                    // This prevents overwriting existing auth (OAuth2, SAML, etc.)
                     UsernamePasswordAuthenticationToken authentication =
                             new UsernamePasswordAuthenticationToken(
-                                    userId,
-                                    null,
-                                    List.of(new SimpleGrantedAuthority("ROLE_USER"))
+                                    userId,              // Principal (username/userId)
+                                    null,               // Credentials (not needed after authentication)
+                                    Collections.emptyList()  // Authorities (roles/permissions - can add later)
                             );
 
-                    SecurityContextHolder.getContext()
-                            .setAuthentication(authentication);
+                    authentication.setDetails(
+                            new WebAuthenticationDetailsSource().buildDetails(request)
+                    );
 
-                    // Still useful for your filters
+                    SecurityContextHolder.getContext().setAuthentication(authentication);
+
+                    // Optional: Keep for backward compatibility with existing code
                     request.setAttribute("USER_ID", userId);
 
-                    log.debug("✅ JWT authenticated & security context set for user: {}", userId);
+                    log.debug("✅ JWT authenticated user: {}", userId);
+                } else if (userId == null) {
+                    log.warn("⚠️ Valid JWT but no userId claim found");
                 }
             } else {
                 log.warn("⚠️ Invalid or expired JWT token");
