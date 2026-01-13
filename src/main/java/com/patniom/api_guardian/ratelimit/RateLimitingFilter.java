@@ -1,11 +1,13 @@
 package com.patniom.api_guardian.ratelimit;
 
-import com.patniom.api_guardian.audit.AuditLogService;
+import com.patniom.api_guardian.audit.AsyncAuditLogService;
 import com.patniom.api_guardian.kafka.KafkaProducerService;
 import com.patniom.api_guardian.kafka.events.ApiKeyUsageEvent;
 import com.patniom.api_guardian.kafka.events.ApiRequestEvent;
+import com.patniom.api_guardian.metrics.MetricsService;
 import com.patniom.api_guardian.security.apikey.ApiKey;
 import com.patniom.api_guardian.util.ClientIpUtil;
+import io.micrometer.core.instrument.Timer;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
@@ -30,10 +32,13 @@ public class RateLimitingFilter extends OncePerRequestFilter {
     private AbuseDetectionService abuseDetectionService;
 
     @Autowired
-    private AuditLogService auditLogService;
+    private AsyncAuditLogService auditLogService; // ✅ CHANGED to async
 
     @Autowired
     private KafkaProducerService kafkaProducerService;
+
+    @Autowired
+    private MetricsService metricsService; // ✅ NEW
 
     @Override
     protected void doFilterInternal(HttpServletRequest request,
@@ -42,6 +47,7 @@ public class RateLimitingFilter extends OncePerRequestFilter {
             throws ServletException, IOException {
 
         String requestId = UUID.randomUUID().toString();
+        Timer.Sample timerSample = metricsService.startTimer(); // ✅ Start timer
         long startTime = System.currentTimeMillis();
 
         String identifier = resolveIdentifier(request);
@@ -59,7 +65,11 @@ public class RateLimitingFilter extends OncePerRequestFilter {
             sendRateLimitResponse(response, statusCode,
                     "You are temporarily banned due to abuse", null);
 
-            // Send to Kafka (async)
+            // ✅ Record metrics
+            metricsService.recordRequest(decision, config.getTier().name(),
+                    request.getRequestURI());
+            metricsService.stopTimer(timerSample);
+
             sendApiRequestEventToKafka(request, identifier, decision, statusCode,
                     config, startTime, requestId);
             return;
@@ -79,7 +89,11 @@ public class RateLimitingFilter extends OncePerRequestFilter {
             sendRateLimitResponse(response, statusCode,
                     "Rate limit exceeded. Please try again later.", retryAfter);
 
-            // Send to Kafka (async)
+            // ✅ Record metrics
+            metricsService.recordRequest(decision, config.getTier().name(),
+                    request.getRequestURI());
+            metricsService.stopTimer(timerSample);
+
             sendApiRequestEventToKafka(request, identifier, decision, statusCode,
                     config, startTime, requestId);
             return;
@@ -92,21 +106,19 @@ public class RateLimitingFilter extends OncePerRequestFilter {
         auditLogService.log(decision, request, identifier);
         setRateLimitHeaders(response, identifier, config);
 
-        // Track API key usage via Kafka (no MongoDB write in hot path!)
         trackApiKeyUsageViaKafka(request);
 
-        // Continue the request
         filterChain.doFilter(request, response);
 
-        // Send to Kafka AFTER response (async)
-        long responseTime = System.currentTimeMillis() - startTime;
+        // ✅ Record metrics AFTER response
+        metricsService.recordRequest(decision, config.getTier().name(),
+                request.getRequestURI());
+        metricsService.stopTimer(timerSample);
+
         sendApiRequestEventToKafka(request, identifier, decision, statusCode,
                 config, startTime, requestId);
     }
 
-    /**
-     * Send API request event to Kafka (async - doesn't block)
-     */
     private void sendApiRequestEventToKafka(HttpServletRequest request,
                                             String identifier,
                                             String decision,
@@ -135,9 +147,6 @@ public class RateLimitingFilter extends OncePerRequestFilter {
         }
     }
 
-    /**
-     * Track API key usage via Kafka (solves MongoDB hot path issue!)
-     */
     private void trackApiKeyUsageViaKafka(HttpServletRequest request) {
         try {
             ApiKey apiKey = (ApiKey) request.getAttribute("API_KEY_OBJ");

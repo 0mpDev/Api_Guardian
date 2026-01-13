@@ -121,6 +121,27 @@
 			<artifactId>commons-codec</artifactId>
 		</dependency>
 
+		<!-- ========== PROMETHEUS + MONITORING (NEW) ========== -->
+
+		<!-- Spring Boot Actuator - Exposes metrics endpoints -->
+		<dependency>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-starter-actuator</artifactId>
+		</dependency>
+
+		<!-- Micrometer Prometheus Registry - Formats metrics for Prometheus -->
+		<dependency>
+			<groupId>io.micrometer</groupId>
+			<artifactId>micrometer-registry-prometheus</artifactId>
+		</dependency>
+
+		<!-- Micrometer Core - For custom metrics -->
+		<dependency>
+			<groupId>io.micrometer</groupId>
+			<artifactId>micrometer-core</artifactId>
+		</dependency>
+
+		<!-- Testing -->
 		<dependency>
 			<groupId>org.springframework.boot</groupId>
 			<artifactId>spring-boot-starter-test</artifactId>

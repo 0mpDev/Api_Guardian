@@ -12,6 +12,7 @@ public class AuditLogService {
 
     private final AuditLogRepository auditLogRepository;
 
+
     public void log(String decision,
                     HttpServletRequest request,
                     String identifier) {
