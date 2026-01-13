@@ -3,6 +3,7 @@ package com.patniom.api_guardian.ratelimit;
 import com.patniom.api_guardian.kafka.KafkaProducerService;
 import com.patniom.api_guardian.kafka.events.BanEvent;
 import com.patniom.api_guardian.kafka.events.RateLimitViolationEvent;
+import com.patniom.api_guardian.metrics.MetricsService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.redis.core.RedisTemplate;
@@ -21,19 +22,18 @@ public class AbuseDetectionService {
     @Autowired
     private KafkaProducerService kafkaProducerService;
 
-    // Configuration (can be moved to @ConfigurationProperties)
-    private static final int VIOLATION_WINDOW_SECONDS = 300; // 5 minutes
+    @Autowired
+    private MetricsService metricsService; // ✅ NEW
+
+    private static final int VIOLATION_WINDOW_SECONDS = 300;
     private static final int VIOLATION_THRESHOLD_MINOR = 3;
     private static final int VIOLATION_THRESHOLD_MODERATE = 5;
     private static final int VIOLATION_THRESHOLD_SEVERE = 10;
 
-    private static final long BAN_DURATION_MINOR = 60;        // 1 minute
-    private static final long BAN_DURATION_MODERATE = 300;    // 5 minutes
-    private static final long BAN_DURATION_SEVERE = 1800;     // 30 minutes
+    private static final long BAN_DURATION_MINOR = 60;
+    private static final long BAN_DURATION_MODERATE = 300;
+    private static final long BAN_DURATION_SEVERE = 1800;
 
-    /**
-     * Check if identifier is currently banned
-     */
     public boolean isBanned(String identifier) {
         Boolean banned = redisTemplate.hasKey("ban:" + identifier);
 
@@ -44,17 +44,11 @@ public class AbuseDetectionService {
         return Boolean.TRUE.equals(banned);
     }
 
-    /**
-     * Record a rate limit violation and apply ban if threshold exceeded
-     * NOW SENDS EVENTS TO KAFKA!
-     */
     public void recordViolation(String identifier) {
         String violationKey = "abuse:" + identifier + ":violations";
 
-        // Increment violation count
         Long violations = redisTemplate.opsForValue().increment(violationKey);
 
-        // Set TTL on first violation (sliding window)
         if (violations == 1) {
             redisTemplate.expire(violationKey, VIOLATION_WINDOW_SECONDS, TimeUnit.SECONDS);
             log.debug("First violation recorded for: {}", identifier);
@@ -62,10 +56,11 @@ public class AbuseDetectionService {
 
         log.warn("⚠️ Rate limit violation #{} for: {}", violations, identifier);
 
-        // Send violation event to Kafka
+        // ✅ Record metric
+        metricsService.recordViolation(identifier);
+
         sendViolationEventToKafka(identifier, violations);
 
-        // Calculate and apply ban based on violation count
         long banSeconds = calculateBanTime(violations);
 
         if (banSeconds > 0) {
@@ -73,14 +68,11 @@ public class AbuseDetectionService {
         }
     }
 
-    /**
-     * Send violation event to Kafka
-     */
     private void sendViolationEventToKafka(String identifier, Long violations) {
         try {
             RateLimitViolationEvent event = RateLimitViolationEvent.builder()
                     .identifier(identifier)
-                    .endpoint("N/A") // Can be enriched if needed
+                    .endpoint("N/A")
                     .tier("N/A")
                     .violationCount(violations.intValue())
                     .retryAfterSeconds(calculateBanTime(violations))
@@ -93,9 +85,6 @@ public class AbuseDetectionService {
         }
     }
 
-    /**
-     * Apply a ban to an identifier and send ban event to Kafka
-     */
     private void applyBan(String identifier, long banSeconds, Long violations) {
         String banKey = "ban:" + identifier;
 
@@ -104,13 +93,12 @@ public class AbuseDetectionService {
         log.error("🚫 BAN APPLIED to {} for {} seconds (violations: {})",
                 identifier, banSeconds, violations);
 
-        // Send ban event to Kafka
+        // ✅ Record metric
+        metricsService.recordBan(identifier, banSeconds);
+
         sendBanEventToKafka(identifier, violations, banSeconds);
     }
 
-    /**
-     * Send ban event to Kafka
-     */
     private void sendBanEventToKafka(String identifier, Long violations, long banSeconds) {
         try {
             LocalDateTime now = LocalDateTime.now();
@@ -174,11 +162,13 @@ public class AbuseDetectionService {
         redisTemplate.delete(banKey);
         redisTemplate.delete(violationKey);
 
+        // ✅ Record ban expired
+        metricsService.recordBanExpired();
+
         log.info("✅ Ban cleared for: {}", identifier);
     }
 
     public void clearAllBans() {
-        // PROD WARNING: Use SCAN instead of KEYS
         var banKeys = redisTemplate.keys("ban:*");
         var violationKeys = redisTemplate.keys("abuse:*");
 

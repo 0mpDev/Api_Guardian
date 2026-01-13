@@ -1,0 +1,77 @@
+{
+  "dashboard": {
+    "title": "API Guardian Monitoring",
+    "tags": ["api-gateway", "monitoring"],
+    "timezone": "browser",
+    "panels": [
+      {
+        "title": "Total Requests",
+        "type": "stat",
+        "gridPos": {"h": 8, "w": 6, "x": 0, "y": 0},
+        "targets": [
+          {
+            "expr": "api_guardian_requests_total",
+            "legendFormat": "Total Requests"
+          }
+        ]
+      },
+      {
+        "title": "Requests by Decision",
+        "type": "graph",
+        "gridPos": {"h": 8, "w": 12, "x": 6, "y": 0},
+        "targets": [
+          {
+            "expr": "rate(api_guardian_requests_allowed_total[1m])",
+            "legendFormat": "Allowed"
+          },
+          {
+            "expr": "rate(api_guardian_requests_rate_limited_total[1m])",
+            "legendFormat": "Rate Limited"
+          },
+          {
+            "expr": "rate(api_guardian_requests_banned_total[1m])",
+            "legendFormat": "Banned"
+          }
+        ]
+      },
+      {
+        "title": "Active Bans",
+        "type": "stat",
+        "gridPos": {"h": 8, "w": 6, "x": 18, "y": 0},
+        "targets": [
+          {
+            "expr": "api_guardian_active_bans",
+            "legendFormat": "Active Bans"
+          }
+        ]
+      },
+      {
+        "title": "Request Duration (P95)",
+        "type": "graph",
+        "gridPos": {"h": 8, "w": 12, "x": 0, "y": 8},
+        "targets": [
+          {
+            "expr": "histogram_quantile(0.95, rate(api_guardian_request_duration_bucket[5m]))",
+            "legendFormat": "P95 Latency"
+          }
+        ]
+      },
+      {
+        "title": "Violations Over Time",
+        "type": "graph",
+        "gridPos": {"h": 8, "w": 12, "x": 12, "y": 8},
+        "targets": [
+          {
+            "expr": "rate(api_guardian_violations_total[1m])",
+            "legendFormat": "Violations/sec"
+          }
+        ]
+      }
+    ],
+    "refresh": "5s",
+    "time": {
+      "from": "now-15m",
+      "to": "now"
+    }
+  }
+}
