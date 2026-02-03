@@ -1,10 +1,3 @@
-# Api_Guardian
-Perfect 👍
-Below is a **polished, professional GitHub README** you can directly copy-paste.
-It’s written to impress **recruiters, interviewers, and senior engineers**.
-
----
-
 # 🛡️ API Guardian
 
 **API Guardian** is a production-grade **API rate limiting, abuse detection, and analytics system** built using **Spring Boot, Redis, and MySQL**.
