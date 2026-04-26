@@ -168,11 +168,11 @@ public class RateLimitingFilter extends OncePerRequestFilter {
     }
 
     private String resolveIdentifier(HttpServletRequest request) {
-        if (request.getAttribute("USER_ID") != null) {
-            return "USER:" + request.getAttribute("USER_ID");
-        }
         if (request.getAttribute("API_KEY_ID") != null) {
             return "KEY:" + request.getAttribute("API_KEY_ID");
+        }
+        if (request.getAttribute("USER_ID") != null) {
+            return "USER:" + request.getAttribute("USER_ID");
         }
         return "IP:" + ClientIpUtil.getClientIp(request);
     }
